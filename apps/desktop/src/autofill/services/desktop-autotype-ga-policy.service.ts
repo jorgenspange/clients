@@ -11,6 +11,7 @@ import { AuthenticationStatus } from "@bitwarden/common/auth/enums/authenticatio
 import { getUserId } from "@bitwarden/common/auth/services/account.service";
 import { AutotypeFeatureFlagState } from "@bitwarden/common/desktop-native/enums/autotype-feature-flag-state.enum";
 import {
+  alwaysAskBeforeFillingEnabled,
   AutotypeGaPolicyData,
   AutotypeShortcutOption,
   isAutotypeGaShortcut,
@@ -36,6 +37,18 @@ export class DesktopAutotypeGaPolicyService {
       ),
   );
 
+  /**
+   * Unlike autotypeGaDefaultSetting$, members can't turn this off. It emits
+   * false while locked or when GA is off.
+   */
+  readonly autotypeGaAlwaysAskBeforeFilling$: Observable<boolean> = this.whenGaAndUnlocked$(
+    (userId) =>
+      this.policyService.policiesByType$(PolicyType.AutotypeGaPolicy, userId).pipe(
+        map((policies) => this.alwaysAskBeforeFillingFromPolicies(policies)),
+        distinctUntilChanged(),
+      ),
+  ).pipe(map((enforced) => enforced ?? false));
+
   // The custom shortcut from the Autotype GA policy, or null when there is none.
   readonly autotypeGaDefaultKeyboardShortcut$: Observable<string[] | null> =
     this.whenGaAndUnlocked$((userId) =>
@@ -54,6 +67,10 @@ export class DesktopAutotypeGaPolicyService {
         .map((policy) => this.shortcutFromPolicy(policy.data))
         .find((shortcut) => shortcut != null) ?? null
     );
+  }
+
+  private alwaysAskBeforeFillingFromPolicies(policies: Policy[]): boolean {
+    return policies.some((policy) => policy.enabled && alwaysAskBeforeFillingEnabled(policy.data));
   }
 
   private shortcutFromPolicy(data: Partial<AutotypeGaPolicyData> | undefined): string[] | null {
